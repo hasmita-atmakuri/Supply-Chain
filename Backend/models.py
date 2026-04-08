@@ -91,14 +91,6 @@ def train_lstm(X_train, X_test, y_train, y_test, labels):
 
     model_path = os.path.join(model_dir, "LSTM.h5")
 
-    # Reshape data for LSTM (samples, timesteps, features)
-    # For tabular data, we use sequence_length=1 and all features as one timestep
-    n_features = X_train.shape[1]
-    sequence_length = 1
-
-    X_train_lstm = X_train.reshape((X_train.shape[0], sequence_length, n_features))
-    X_test_lstm = X_test.reshape((X_test.shape[0], sequence_length, n_features))
-
     # Encode labels to categorical for multi-class classification
     le = LabelEncoder()
     y_train_encoded = le.fit_transform(y_train)
@@ -108,13 +100,35 @@ def train_lstm(X_train, X_test, y_train, y_test, labels):
     y_train_categorical = to_categorical(y_train_encoded, num_classes=n_classes)
     y_test_categorical = to_categorical(y_test_encoded, num_classes=n_classes)
 
+    # 1. Data Reshaping: Explicitly reshape X_train and X_test into 3D arrays
+    n_features = X_train.shape[1]
+    X_train_lstm = np.reshape(X_train, (X_train.shape[0], 1, n_features))
+    X_test_lstm = np.reshape(X_test, (X_test.shape[0], 1, n_features))
+
+    lstm_model = None
+
+    # 3. Model Compatibility Check
     if os.path.exists(model_path):
-        lstm_model = load_model(model_path)
-        st.success("LSTM Model Loaded")
-    else:
+        try:
+            lstm_model = load_model(model_path)
+            # Check if model input shape matches the current feature dimension
+            if lstm_model.input_shape != (None, 1, n_features):
+                st.warning(f"Model dimension mismatch (expected {(None, 1, n_features)}, found {lstm_model.input_shape}). Retraining.")
+                lstm_model = None
+                os.remove(model_path)
+            else:
+                st.success("LSTM Model Loaded")
+        except Exception as e:
+            st.warning(f"Error loading model: {e}. Retraining...")
+            lstm_model = None
+            if os.path.exists(model_path):
+                os.remove(model_path)
+
+    if lstm_model is None:
         # Build LSTM model
         lstm_model = Sequential()
-        lstm_model.add(LSTM(50, activation='relu', input_shape=(sequence_length, n_features)))
+        # 2. Dynamic Input Shape: dynamically set input_shape using (1, n_features)
+        lstm_model.add(LSTM(50, activation='relu', input_shape=(1, n_features)))
         lstm_model.add(Dropout(0.2))
         lstm_model.add(Dense(50, activation='relu'))
         lstm_model.add(Dropout(0.2))
@@ -123,14 +137,47 @@ def train_lstm(X_train, X_test, y_train, y_test, labels):
         lstm_model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
         st.info("Training LSTM Model...")
+        
+        from tensorflow.keras.callbacks import Callback
+        import math
+        class StreamlitProgressCallback(Callback):
+            def __init__(self, total_epochs, total_batches):
+                self.total_epochs = total_epochs
+                self.total_batches = total_batches
+                self.progress_bar = st.progress(0.0)
+                self.status_text = st.empty()
+                self.current_epoch = 0
+
+            def on_epoch_begin(self, epoch, logs=None):
+                self.current_epoch = epoch
+
+            def on_batch_end(self, batch, logs=None):
+                freq = max(1, self.total_batches // 10)
+                if batch % freq == 0:
+                    self.status_text.text(f"Training in progress... (Epoch {self.current_epoch+1}/{self.total_epochs}, Batch {batch}/{self.total_batches})")
+
+            def on_epoch_end(self, epoch, logs=None):
+                progress = (epoch + 1) / self.total_epochs
+                self.progress_bar.progress(float(progress))
+                logs = logs or {}
+                loss = logs.get('loss', 0.0)
+                acc = logs.get('accuracy', 0.0)
+                self.status_text.text(f"Epoch {epoch+1}/{self.total_epochs} - loss: {loss:.4f} - accuracy: {acc:.4f}")
+
+        total_epochs = 5 # Reduced drastically for interactive web app speed
+        batch_size = 1024 # Greatly increased for faster CPU execution on SMOTE oversampled data
+        total_batches = math.ceil((X_train_lstm.shape[0] * 0.9) / batch_size)
+        st_callback = StreamlitProgressCallback(total_epochs, total_batches)
+
         # Train the model
         lstm_model.fit(
             X_train_lstm,
             y_train_categorical,
-            epochs=50,
-            batch_size=32,
+            epochs=total_epochs,
+            batch_size=batch_size,
             validation_split=0.1,
             verbose=0,
+            callbacks=[st_callback]
         )
 
         lstm_model.save(model_path)
@@ -138,6 +185,8 @@ def train_lstm(X_train, X_test, y_train, y_test, labels):
 
     # Make predictions
     y_pred_proba = lstm_model.predict(X_test_lstm, verbose=0)
+    
+    # 4. Output Handling: Use np.argmax on the model's softmax output
     y_pred_encoded = np.argmax(y_pred_proba, axis=1)
 
     # Convert back to original labels

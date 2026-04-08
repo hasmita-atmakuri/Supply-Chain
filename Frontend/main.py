@@ -31,6 +31,14 @@ if 'y_test' not in st.session_state:
     st.session_state['y_test'] = None
 if 'labels' not in st.session_state:
     st.session_state['labels'] = None
+if 'metrics_data' not in st.session_state:
+    st.session_state['metrics_data'] = {
+        'accuracy': [],
+        'precision': [],
+        'recall': [],
+        'fscore': [],
+        'models': []
+    }
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
@@ -41,7 +49,8 @@ menu = [
     "Ridge Classifier", 
     "LSTM", 
     "Performance Graph", 
-    "Description"
+    "Description",
+    "Exit"
 ]
 choice = st.sidebar.radio("Select Action", menu)
 
@@ -49,17 +58,18 @@ if choice == "Upload Dataset":
     st.header("Upload Dataset")
     uploaded_file = st.file_uploader("Choose a CSV format dataset", type="csv")
     if uploaded_file is not None:
-        dfl = upload_dataset(uploaded_file)
-        if dfl is not None:
-            st.session_state['dfl'] = dfl
-            # Reset metrics if a new dataset is uploaded
-            st.session_state['metrics_data'] = {
-                'accuracy': [],
-                'precision': [],
-                'recall': [],
-                'fscore': [],
-                'models': []
-            }
+        if st.button("Load Dataset"):
+            dfl = upload_dataset(uploaded_file)
+            if dfl is not None:
+                st.session_state['dfl'] = dfl
+                # Reset metrics if a new dataset is uploaded
+                st.session_state['metrics_data'] = {
+                    'accuracy': [],
+                    'precision': [],
+                    'recall': [],
+                    'fscore': [],
+                    'models': []
+                }
 
 elif choice == "Preprocess Data":
     st.header("Preprocess Data")
@@ -159,3 +169,12 @@ elif choice == "Description":
     st.markdown("The most striking difference is the ~45% gap between the traditional ML models and the Deep Learning model (LSTM).")
     st.markdown("- **Tabular vs. Sequential:** The dataset is 'snapshot' data (one row = one order). Traditional models excel. LSTM expects a 'movie' (sequence), but we gave it a single 'frame'.")
     st.markdown("- **Complexity vs. Efficiency:** The Decision Tree solved the problem with simple splits. The LSTM tried to learn complex non-linear mappings but likely underfitted lacking sequential dependencies.")
+
+elif choice == "Exit":
+    st.header("Exit Application")
+    st.warning("Are you sure you want to exit the application?")
+    if st.button("Exit"):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.success("Session cleared! You may now safely close this browser window/tab.")
+        st.stop()

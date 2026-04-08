@@ -38,7 +38,7 @@ def preprocess_data(dfl):
 
     # Determine target column (try common names, or use last column)
     target_column = None
-    possible_names = ['Order Status', 'order_status', 'OrderStatus', 'target', 'Target', 'label', 'Label', 'class', 'Class']
+    possible_names = ['Delivery Status', 'Late_delivery_risk', 'Order Status', 'order_status', 'OrderStatus', 'target', 'Target', 'label', 'Label', 'class', 'Class']
     
     for col_name in possible_names:
         if col_name in dfl.columns:
@@ -53,13 +53,25 @@ def preprocess_data(dfl):
     else:
         st.info(f"Using '{target_column}' as target column.")
 
-    # Encode categorical columns
+    # 1. Drop columns that are completely empty (100% missing values)
+    dfl.dropna(axis=1, how='all', inplace=True)
+
+    # 2. Fill missing values robustly for each column
+    for col in dfl.columns:
+        mode_series = dfl[col].mode()
+        if not mode_series.empty:
+            dfl[col].fillna(mode_series.iloc[0], inplace=True)
+        else:
+            # Fallback if mode is unavailable
+            if dfl[col].dtype == 'object':
+                dfl[col].fillna('Unknown', inplace=True)
+            else:
+                dfl[col].fillna(0, inplace=True)
+
+    # 3. Encode categorical columns (after missing values are handled to avoid 'nan' strings)
     for col in dfl.columns:
         if dfl[col].dtype == 'object':
             dfl[col] = le.fit_transform(dfl[col].astype(str))
-
-    # Fill missing values with most frequent value
-    dfl.fillna(dfl.mode().iloc[0], inplace=True)
 
     # Separate features and target
     labels = dfl[target_column].unique()
