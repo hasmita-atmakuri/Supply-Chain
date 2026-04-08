@@ -6,42 +6,35 @@
 
 import pandas as pd
 import numpy as np
-from tkinter import filedialog
+import streamlit as st
 from sklearn.preprocessing import LabelEncoder
 from imblearn.over_sampling import SMOTE
 
-# Global variables
-filename = None
-dfl = None
+# Global variables are replaced by returning values or using session state where applicable
 le = LabelEncoder()
-labels = None
 
-def upload_dataset(text):
+def upload_dataset(uploaded_file):
     """
-    Upload IoT / Supply Chain dataset using file dialog
+    Upload IoT / Supply Chain dataset using Streamlit uploaded file
     """
-    global filename, dfl
+    if uploaded_file is not None:
+        dfl = pd.read_csv(uploaded_file, encoding='latin1')
+        st.success(f"{uploaded_file.name} Loaded Successfully")
+        st.write("Dataset Preview:")
+        st.dataframe(dfl.head())
+        return dfl
+    return None
 
-    filename = filedialog.askopenfilename(initialdir="Datasets")
-    dfl = pd.read_csv(filename, encoding='latin1')
-
-    text.delete('1.0', 'end')
-    text.insert('end', f"{filename} Loaded Successfully\n\n")
-    text.insert('end', "Dataset Preview:\n")
-    text.insert('end', str(dfl.head()))
-
-def preprocess_data(text):
+def preprocess_data(dfl):
     """
     Perform preprocessing:
     - Handle categorical values
     - Fill missing values
     - Apply SMOTE
     """
-    global dfl, labels
-
     if dfl is None:
-        text.insert('end', "\nError: Please upload a dataset first!\n")
-        return None, None
+        st.error("Error: Please upload a dataset first!")
+        return None, None, None
 
     # Determine target column (try common names, or use last column)
     target_column = None
@@ -55,10 +48,10 @@ def preprocess_data(text):
     # If not found, use the last column as target
     if target_column is None:
         target_column = dfl.columns[-1]
-        text.insert('end', f"\nWarning: 'Order Status' column not found. Using last column '{target_column}' as target.\n")
-        text.insert('end', f"Available columns: {list(dfl.columns)}\n")
+        st.warning(f"'Order Status' column not found. Using last column '{target_column}' as target.")
+        st.info(f"Available columns: {list(dfl.columns)}")
     else:
-        text.insert('end', f"\nUsing '{target_column}' as target column.\n")
+        st.info(f"Using '{target_column}' as target column.")
 
     # Encode categorical columns
     for col in dfl.columns:
@@ -77,7 +70,7 @@ def preprocess_data(text):
     smote = SMOTE(random_state=42)
     X_res, y_res = smote.fit_resample(X, y)
 
-    text.insert('end', "\nData Preprocessing Completed\n")
-    text.insert('end', f"Total Records After SMOTE: {len(X_res)}\n")
+    st.success("Data Preprocessing Completed")
+    st.info(f"Total Records After SMOTE: {len(X_res)}")
 
-    return X_res, y_res
+    return X_res, y_res, labels

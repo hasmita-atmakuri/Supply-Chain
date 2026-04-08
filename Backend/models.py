@@ -8,16 +8,16 @@
 import os
 import joblib
 import numpy as np
+import streamlit as st
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import RidgeClassifier
 from sklearn.preprocessing import LabelEncoder
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras.utils import to_categorical
-from metrics import calculate_metrics
+from .metrics import calculate_metrics
 
-
-def train_ridge(X_train, X_test, y_train, y_test, labels, text):
+def train_ridge(X_train, X_test, y_train, y_test, labels):
     """
     Train or load Ridge Classifier
     """
@@ -32,25 +32,24 @@ def train_ridge(X_train, X_test, y_train, y_test, labels, text):
         try:
             ridge = joblib.load(model_path)
             ridge.predict(X_test[:1]) # Test prediction to confirm compatibility
-            text.insert('end', "Ridge Classifier Model Loaded\n")
+            st.success("Ridge Classifier Model Loaded")
         except Exception as e:
-            text.insert('end', f"Failed to load Ridge Classifier (retraining): {e}\n")
+            st.warning(f"Failed to load Ridge Classifier (retraining): {e}")
             ridge = None
 
     if ridge is None:
         ridge = RidgeClassifier()
         ridge.fit(X_train, y_train)
         joblib.dump(ridge, model_path)
-        text.insert('end', "Ridge Classifier Model Trained and Saved\n")
+        st.success("Ridge Classifier Model Trained and Saved")
 
     try:
         predictions = ridge.predict(X_test)
-        calculate_metrics("Ridge Classifier", y_test, predictions, labels, text)
+        calculate_metrics("Ridge Classifier", y_test, predictions, labels)
     except Exception as e:
-        text.insert('end', f"Error in Ridge Classifier prediction: {e}\n")
+        st.error(f"Error in Ridge Classifier prediction: {e}")
 
-
-def train_dtc(X_train, X_test, y_train, y_test, labels, text):
+def train_dtc(X_train, X_test, y_train, y_test, labels):
     """
     Train or load Decision Tree Classifier
     """
@@ -63,27 +62,26 @@ def train_dtc(X_train, X_test, y_train, y_test, labels, text):
     dtc = None
     if os.path.exists(model_path):
         try:
-            dtc = joblib.load(model_path)
-            dtc.predict(X_test[:1]) # Test prediction to confirm compatibility
-            text.insert('end', "Decision Tree Model Loaded\n")
+             dtc = joblib.load(model_path)
+             dtc.predict(X_test[:1]) # Test prediction to confirm compatibility
+             st.success("Decision Tree Model Loaded")
         except Exception as e:
-            text.insert('end', f"Failed to load Decision Tree Classifier (retraining): {e}\n")
-            dtc = None
+             st.warning(f"Failed to load Decision Tree Classifier (retraining): {e}")
+             dtc = None
 
     if dtc is None:
         dtc = DecisionTreeClassifier()
         dtc.fit(X_train, y_train)
         joblib.dump(dtc, model_path)
-        text.insert('end', "Decision Tree Model Trained and Saved\n")
+        st.success("Decision Tree Model Trained and Saved")
 
     try:
         predictions = dtc.predict(X_test)
-        calculate_metrics("Decision Tree Classifier", y_test, predictions, labels, text)
+        calculate_metrics("Decision Tree Classifier", y_test, predictions, labels)
     except Exception as e:
-        text.insert('end', f"Error in Decision Tree prediction: {e}\n")
+        st.error(f"Error in Decision Tree prediction: {e}")
 
-
-def train_lstm(X_train, X_test, y_train, y_test, labels, text):
+def train_lstm(X_train, X_test, y_train, y_test, labels):
     """
     Train or load LSTM model
     """
@@ -112,7 +110,7 @@ def train_lstm(X_train, X_test, y_train, y_test, labels, text):
 
     if os.path.exists(model_path):
         lstm_model = load_model(model_path)
-        text.insert('end', "LSTM Model Loaded\n")
+        st.success("LSTM Model Loaded")
     else:
         # Build LSTM model
         lstm_model = Sequential()
@@ -124,7 +122,7 @@ def train_lstm(X_train, X_test, y_train, y_test, labels, text):
 
         lstm_model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-        text.insert('end', "Training LSTM Model...\n")
+        st.info("Training LSTM Model...")
         # Train the model
         lstm_model.fit(
             X_train_lstm,
@@ -136,7 +134,7 @@ def train_lstm(X_train, X_test, y_train, y_test, labels, text):
         )
 
         lstm_model.save(model_path)
-        text.insert('end', "LSTM Model Trained and Saved\n")
+        st.success("LSTM Model Trained and Saved")
 
     # Make predictions
     y_pred_proba = lstm_model.predict(X_test_lstm, verbose=0)
@@ -145,4 +143,4 @@ def train_lstm(X_train, X_test, y_train, y_test, labels, text):
     # Convert back to original labels
     y_pred = le.inverse_transform(y_pred_encoded)
 
-    calculate_metrics("LSTM", y_test, y_pred, labels, text)
+    calculate_metrics("LSTM", y_test, y_pred, labels)

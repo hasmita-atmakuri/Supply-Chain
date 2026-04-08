@@ -1,209 +1,161 @@
 # main.py
 # ----------------------------
-# Main GUI application
+# Main Streamlit Web Application
 # Supply Chain Disruption Analysis using ML Models
 
-from tkinter import *
+import streamlit as st
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from sklearn.model_selection import train_test_split
-from data_utils import upload_dataset, preprocess_data
-from models import train_dtc, train_ridge, train_lstm
-from plot_utils import plot_graph
-from ui_style import style_main_window
+from Backend.data_utils import upload_dataset, preprocess_data
+from Backend.models import train_dtc, train_ridge, train_lstm
+from Backend.plot_utils import plot_graph
 
-# Initialize main window and apply styling
-main = Tk()
-text, button_options, buttons_parent = style_main_window(main)
+# Setup Streamlit page configuration
+st.set_page_config(page_title="Supply Chain Disruption Analysis", layout="wide")
 
-# Global data holders
-X = y = None
-X_train = X_test = y_train = y_test = None
-labels = None
+st.title("Supply Chain Disruption Analysis")
 
-def preprocess():
-    """
-    Preprocess dataset and split into train & test
-    """
-    global X, y, X_train, X_test, y_train, y_test, labels
-    import data_utils
-    X, y = preprocess_data(text)
-    if X is None or y is None:
-        return
-    labels = data_utils.labels
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=77
-    )
-    text.insert('end', "\nData split into train and test sets.\n")
+# Initialize session state variables
+if 'dfl' not in st.session_state:
+    st.session_state['dfl'] = None
+if 'X_train' not in st.session_state:
+    st.session_state['X_train'] = None
+if 'X_test' not in st.session_state:
+    st.session_state['X_test'] = None
+if 'y_train' not in st.session_state:
+    st.session_state['y_train'] = None
+if 'y_test' not in st.session_state:
+    st.session_state['y_test'] = None
+if 'labels' not in st.session_state:
+    st.session_state['labels'] = None
 
-def train_dtc_wrapper():
-    """
-    Wrapper function to train Decision Tree Classifier
-    """
-    global X_train, X_test, y_train, y_test, labels
-    if X_train is None or X_test is None:
-        text.insert('end', "\nError: Please preprocess data first!\n")
-        return
-    train_dtc(X_train, X_test, y_train, y_test, labels, text)
+# Sidebar navigation
+st.sidebar.title("Navigation")
+menu = [
+    "Upload Dataset", 
+    "Preprocess Data", 
+    "Decision Tree Classifier", 
+    "Ridge Classifier", 
+    "LSTM", 
+    "Performance Graph", 
+    "Description"
+]
+choice = st.sidebar.radio("Select Action", menu)
 
-def train_ridge_wrapper():
-    """
-    Wrapper function to train Ridge Classifier
-    """
-    global X_train, X_test, y_train, y_test, labels
-    if X_train is None or X_test is None:
-        text.insert('end', "\nError: Please preprocess data first!\n")
-        return
-    train_ridge(X_train, X_test, y_train, y_test, labels, text)
+if choice == "Upload Dataset":
+    st.header("Upload Dataset")
+    uploaded_file = st.file_uploader("Choose a CSV format dataset", type="csv")
+    if uploaded_file is not None:
+        dfl = upload_dataset(uploaded_file)
+        if dfl is not None:
+            st.session_state['dfl'] = dfl
+            # Reset metrics if a new dataset is uploaded
+            st.session_state['metrics_data'] = {
+                'accuracy': [],
+                'precision': [],
+                'recall': [],
+                'fscore': [],
+                'models': []
+            }
 
+elif choice == "Preprocess Data":
+    st.header("Preprocess Data")
+    if st.session_state['dfl'] is not None:
+        if st.button("Start Preprocessing"):
+            with st.spinner("Preprocessing Data..."):
+                X, y, labels = preprocess_data(st.session_state['dfl'])
+                if X is not None and y is not None:
+                    # Split data
+                    X_train, X_test, y_train, y_test = train_test_split(
+                        X, y, test_size=0.2, random_state=77
+                    )
+                    # Save to session_state
+                    st.session_state['X_train'] = X_train
+                    st.session_state['X_test'] = X_test
+                    st.session_state['y_train'] = y_train
+                    st.session_state['y_test'] = y_test
+                    st.session_state['labels'] = labels
+                    st.success("Data split into train and test sets.")
+    else:
+        st.warning("Please upload a dataset first from the 'Upload Dataset' tab.")
 
-def train_lstm_wrapper():
-    """
-    Wrapper function to train LSTM
-    """
-    global X_train, X_test, y_train, y_test, labels
-    if X_train is None or X_test is None:
-        text.insert('end', "\nError: Please preprocess data first!\n")
-        return
-    train_lstm(X_train, X_test, y_train, y_test, labels, text)
+elif choice == "Decision Tree Classifier":
+    st.header("Decision Tree Classifier Output")
+    if st.session_state['X_train'] is not None:
+        if st.button("Train / Evaluate Decision Tree"):
+            with st.spinner('Running Decision Tree...'):
+                train_dtc(
+                    st.session_state['X_train'], 
+                    st.session_state['X_test'], 
+                    st.session_state['y_train'], 
+                    st.session_state['y_test'], 
+                    st.session_state['labels']
+                )
+    else:
+         st.warning("Please preprocess the data first!")
 
-# Buttons
-Button(
-    buttons_parent,
-    text="Upload Dataset",
-    command=lambda: upload_dataset(text),
-    **button_options,
-).pack(pady=5)
+elif choice == "Ridge Classifier":
+    st.header("Ridge Classifier Output")
+    if st.session_state['X_train'] is not None:
+         if st.button("Train / Evaluate Ridge Classifier"):
+             with st.spinner('Running Ridge Classifier...'):
+                 train_ridge(
+                     st.session_state['X_train'], 
+                     st.session_state['X_test'], 
+                     st.session_state['y_train'], 
+                     st.session_state['y_test'], 
+                     st.session_state['labels']
+                 )
+    else:
+         st.warning("Please preprocess the data first!")
 
-Button(
-    buttons_parent,
-    text="Preprocess Data",
-    command=preprocess,
-    **button_options,
-).pack(pady=5)
+elif choice == "LSTM":
+    st.header("LSTM Output")
+    if st.session_state['X_train'] is not None:
+         if st.button("Train / Evaluate LSTM"):
+             with st.spinner('Running LSTM...'):
+                 train_lstm(
+                     st.session_state['X_train'], 
+                     st.session_state['X_test'], 
+                     st.session_state['y_train'], 
+                     st.session_state['y_test'], 
+                     st.session_state['labels']
+                 )
+    else:
+         st.warning("Please preprocess the data first!")
 
-Button(
-    buttons_parent,
-    text="Decision Tree Classifier",
-    command=train_dtc_wrapper,
-    **button_options,
-).pack(pady=5)
+elif choice == "Performance Graph":
+    st.header("Performance Comparison")
+    plot_graph()
 
-Button(
-    buttons_parent,
-    text="Ridge Classifier",
-    command=train_ridge_wrapper,
-    **button_options,
-).pack(pady=5)
-
-Button(
-    buttons_parent,
-    text="LSTM",
-    command=train_lstm_wrapper,
-    **button_options,
-).pack(pady=5)
-
-Button(
-    buttons_parent,
-    text="Performance Graph",
-    command=plot_graph,
-    **button_options,
-).pack(pady=5)
-
-def show_description():
-    """
-    Displays detailed performance analysis in a new window
-    """
-    desc_window = Toplevel(main)
-    desc_window.title("Model Performance Analysis")
-    desc_window.geometry("800x600")
-
-    text_area = Text(desc_window, wrap='word', font=("Arial", 11))
-    text_area.pack(expand=True, fill='both', side='left')
-
-    scrollbar = Scrollbar(desc_window, command=text_area.yview)
-    scrollbar.pack(side='right', fill='y')
-    text_area['yscrollcommand'] = scrollbar.set
-
-    # Define bold font tag
-    text_area.tag_configure("bold", font=("Arial", 11, "bold"))
-
-    content = [
-        ("Performance Analysis: Decision Tree vs. Ridge Classifier vs. LSTM\n\n", "bold"),
-        
-        ("1. Model Performance Overview\n\n", "bold"),
-        
-        ("*   ", "normal"),
-        ("Decision Tree Classifier:\n", "bold"),
-        ("    *   ", "normal"),
-        ("Performance: ", "bold"),
-        ("Achieved ~100% across all metrics.\n", "normal"),
-        ("    *   ", "normal"),
-        ("Analysis: ", "bold"),
-        ("This indicates that the dataset likely contains distinct, non-linear feature boundaries that the Decision Tree could perfectly split. It found explicit rules governing the \"Order Status\".\n\n", "normal"),
-
-        ("*   ", "normal"),
-        ("Ridge Classifier:\n", "bold"),
-        ("    *   ", "normal"),
-        ("Performance: ", "bold"),
-        ("Achieved near ~100%.\n", "normal"),
-        ("    *   ", "normal"),
-        ("Analysis: ", "bold"),
-        ("The high performance suggests that the classes are largely linearly separable. The regularization (L2) helps it generalize well, making it a robust choice.\n\n", "normal"),
-
-        ("*   ", "normal"),
-        ("LSTM (Long Short-Term Memory):\n", "bold"),
-        ("    *   ", "normal"),
-        ("Performance: ", "bold"),
-        ("Significantly lower, hovering around ~50-55%.\n", "normal"),
-        ("    *   ", "normal"),
-        ("Analysis: ", "bold"),
-        ("The LSTM performed the worst. LSTMs are designed for sequential data (time-series, text) where past information influences future outcomes.\n", "normal"),
-        ("    *   ", "normal"),
-        ("Why the gap? ", "bold"),
-        ("The data is tabular (single rows of independent orders) and is fed into the LSTM with a sequence length of 1. It acts as a inefficient neural network without being able to leverage its \"memory\" strengths.\n\n", "normal"),
-
-        ("2. Best and Worst Performers\n\n", "bold"),
-
-        ("*   ", "normal"),
-        ("Best Model: Decision Tree Classifier\n", "bold"),
-        ("    *   It perfectly captured the logic of the dataset.\n\n", "normal"),
-
-        ("*   ", "normal"),
-        ("Worst Model: LSTM\n", "bold"),
-        ("    *   It provides no benefit over traditional models for this non-sequential dataset.\n\n", "normal"),
-
-        ("3. Key Performance Gaps\n\n", "bold"),
-
-        ("The most striking difference is the ~45% gap between the traditional ML models and the Deep Learning model (LSTM).\n\n", "normal"),
-
-        ("*   ", "normal"),
-        ("Tabular vs. Sequential: ", "bold"),
-        ("The dataset is \"snapshot\" data (one row = one order). Traditional models excelle. LSTM expects a \"movie\" (sequence), but we gave it a single \"frame\".\n", "normal"),
-        ("*   ", "normal"),
-        ("Complexity vs. Efficiency: ", "bold"),
-        ("The Decision Tree solved the problem with simple splits. The LSTM tried to learn complex non-linear mappings but likely underfitted lacking sequential dependencies.\n", "normal"),
-    ]
-
-    for text_part, tag in content:
-        if tag == "normal":
-             text_area.insert('end', text_part)
-        else:
-             text_area.insert('end', text_part, tag)
+elif choice == "Description":
+    st.header("Model Performance Analysis")
+    st.markdown("### Performance Analysis: Decision Tree vs. Ridge Classifier vs. LSTM")
     
-    text_area.config(state='disabled')
+    st.markdown("#### 1. Model Performance Overview")
+    st.markdown("**Decision Tree Classifier:**")
+    st.markdown("- **Performance:** Achieved ~100% across all metrics.")
+    st.markdown("- **Analysis:** This indicates that the dataset likely contains distinct, non-linear feature boundaries that the Decision Tree could perfectly split. It found explicit rules governing the 'Order Status'.")
 
-Button(
-    buttons_parent,
-    text="Description",
-    command=show_description,
-    **button_options,
-).pack(pady=5)
+    st.markdown("**Ridge Classifier:**")
+    st.markdown("- **Performance:** Achieved near ~100%.")
+    st.markdown("- **Analysis:** The high performance suggests that the classes are largely linearly separable. The regularization (L2) helps it generalize well, making it a robust choice.")
 
-Button(
-    buttons_parent,
-    text="Exit",
-    command=main.destroy,
-    **button_options,
-).pack(pady=10)
+    st.markdown("**LSTM (Long Short-Term Memory):**")
+    st.markdown("- **Performance:** Significantly lower, hovering around ~50-55%.")
+    st.markdown("- **Analysis:** The LSTM performed the worst. LSTMs are designed for sequential data (time-series, text) where past information influences future outcomes.")
+    st.markdown("- **Why the gap?** The data is tabular (single rows of independent orders) and is fed into the LSTM with a sequence length of 1. It acts as a inefficient neural network without being able to leverage its 'memory' strengths.")
 
-# Run GUI
-main.mainloop()
+    st.markdown("#### 2. Best and Worst Performers")
+    st.markdown("- **Best Model:** Decision Tree Classifier")
+    st.markdown("  - It perfectly captured the logic of the dataset.")
+    st.markdown("- **Worst Model:** LSTM")
+    st.markdown("  - It provides no benefit over traditional models for this non-sequential dataset.")
+    
+    st.markdown("#### 3. Key Performance Gaps")
+    st.markdown("The most striking difference is the ~45% gap between the traditional ML models and the Deep Learning model (LSTM).")
+    st.markdown("- **Tabular vs. Sequential:** The dataset is 'snapshot' data (one row = one order). Traditional models excel. LSTM expects a 'movie' (sequence), but we gave it a single 'frame'.")
+    st.markdown("- **Complexity vs. Efficiency:** The Decision Tree solved the problem with simple splits. The LSTM tried to learn complex non-linear mappings but likely underfitted lacking sequential dependencies.")
